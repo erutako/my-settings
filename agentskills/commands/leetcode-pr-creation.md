@@ -1,5 +1,5 @@
 ---
-description: LeetCode 解答ブランチ向けに差分を把握し、問題番号・問題名（リンク）、問題URL（問題: 行）、PR URL（コードブロック内の平文）付きで gh で Open 状態の PR を作成するワークフロー
+description: "LeetCode 解答ブランチ向けに差分を把握し、問題番号・問題名（リンク）、問題URL（問題: 行）、PR URL（コードブロック内の平文）付きで gh で Open 状態の PR を作成するワークフロー"
 ---
 
 # LeetCode 用 Pull Request 作成
