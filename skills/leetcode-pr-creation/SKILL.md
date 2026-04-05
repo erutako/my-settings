@@ -64,11 +64,7 @@ PR は **引数で渡されたブランチ（マージ先）** と **現在 chec
 に取り組みましたので、お時間あればレビューしていただけると嬉しいです！
 
 問題: https://leetcode.com/problems/two-sum/description/
-
-```
-PR: https://github.com/org/repo/pull/42
-```
-
+PR: `https://github.com/org/repo/pull/42`
 言語: <gitの差分で取得した利用言語>
 ````
 
