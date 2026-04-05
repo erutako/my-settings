@@ -1,5 +1,5 @@
 ---
-description: "LeetCode 解答ブランチ向けに差分を把握し、問題番号・問題名（リンク）、問題URL（問題: 行）、PR URL（コードブロック内の平文）付きで gh で Open 状態の PR を作成するワークフロー"
+description: "LeetCode 解答ブランチ向けに差分を把握し、問題番号・問題名（リンク、121. 形式）、問題URL（問題: 行）、PR URL（インラインコードの平文）付きで gh で Open 状態の PR を作成するワークフロー"
 ---
 
 # LeetCode 用 Pull Request 作成
@@ -13,6 +13,30 @@ PR は **引数で渡されたブランチ（マージ先）** と **現在 chec
 - **マージ先（base）**: コマンドの引数として渡されたブランチ（例: `develop`）。未指定の場合は Git のデフォルトブランチ（`origin/HEAD` が指すブランチ、通常 `main`）。PR はこのブランチに向けて作成される。
 - **マージ元**: 現在 checkout しているブランチ（`HEAD`）。ここでの変更が PR の内容となる。
 - **差分の取得**: `git diff <引数のブランチ>...HEAD` により、マージ先にない変更（マージ元での追加分）を把握する。
+
+## 本文・タイトルのフォーマット（基準）
+
+以降の Phase はここで定義した表記に揃える。
+
+### PR タイトル
+
+- **`<番号>. <LeetCode の英語タイトル>`**（例: `1. Two Sum`, `42. Trapping Rain Water`）。
+- **`#` は使わない**（本文のリンクテキストも同様）。
+
+### PR 本文（`.pr_body_temp.md` に書くブロック。上から順）
+
+| 順 | 内容 | 表記 |
+|---:|---|---|
+| 1 | 挨拶 | 1 行（例: `いつもお世話になっております。`） |
+| 2 | 問題へのリンク | `[番号. 問題名](https://leetcode.com/problems/<slug>/)` … リンク先は Phase 3 で確定。`#番号` は使わず **番号のあとに `. `（ドット＋半角スペース）** |
+| 3 | レビュー依頼の定型 | 例: `に取り組みましたので、お時間あればレビューしていただけると嬉しいです！` |
+| 4 | 区切り | 空行 |
+| 5 | 問題ページ URL | `問題: https://leetcode.com/problems/<slug>/description/` … **平文**（`/description/` 付き推奨） |
+| 6 | 区切り | 空行 |
+| 7 | GitHub PR の URL | 1 行で `PR: ` のあとに URL を **インラインコード（バッククォート 1 重）**で囲む。完成形の例: 本文サンプル参照。三重バッククォートのフェンスは使わない |
+| 8 | 言語 | `言語: ` + Phase 2 の差分から判断した言語名 |
+
+**二段階の扱い**: 手順 7 は `gh pr create` のあとにしか URL が確定しない。**第1回**は行 1〜6 → 空行 → **行 8（言語）**まで。行 7 は書かない。**第2回**は行 7 を挿入した完成形に `.pr_body_temp.md` を書き換え、`gh pr edit` する。
 
 ## 実行プロセス
 
@@ -35,32 +59,32 @@ PR は **引数で渡されたブランチ（マージ先）** と **現在 chec
 差分に含まれる**各ファイルの本文**から、対象となる LeetCode 問題を特定する。
 
 1. **ヒントの範囲**
-   - ヒントは**基本的にファイル内に書かれた内容だけ**とする: **問題文に対する感想・メモ（コメント）** と **実装コード**。パスやファイル名に頼らない。
+   - ヒントは**基本的にファイル内に書かれた内容だけ**とする: **問題文に対する感想・メモ（コメント）** と **実装コード**。
    - 書かれた文章から**キーワード**（制約、入出力、データ構造、典型表現など）を拾い、それがどの問題に対応するかを推論する。
    - **実装しているアルゴリズム・計算量・使っているデータ構造**（例: two pointers, sliding window, DFS, union-find）から、該当しそうな問題を絞り込み、特定する。
 2. **問題番号と問題名**
    - 特定した問題について、LeetCode が付与する **問題番号**（例: `1`, `94`）を把握する。コメントに番号が無い場合は、公式問題ページで確認する。
-   - PR タイトルには **問題番号と LeetCode が公式で使う問題名（英語）の両方** を含める（例: `#1 Two Sum`, `#94 Binary Tree Inorder Traversal`）。番号の書き方は `#<番号> <問題名>` を推奨する。
-3. **公式 URL（本文での扱い）**
-   - 問題ページのベースは `https://leetcode.com/problems/<slug>/`（`<slug>` は URL 用スラッグ。特定した問題名から公式サイトで確認する）。本文の **「問題:」行** では、ブラウザの表示に合わせて **`/description/` 付き**（例: `https://leetcode.com/problems/linked-list-cycle/description/`）を用いてよい。
-   - 本文の定型では、**番号+問題名の行を Markdown リンク**に加え、**`PR:` 用コードブロックの直前に `問題:` 行で問題 URL を平文**で書く（下記 Phase 4）。
+   - PR タイトルには **問題番号と LeetCode が公式で使う問題名（英語）の両方** を含める（例: `1. Two Sum`, `94. Binary Tree Inorder Traversal`）。番号の書き方は `<番号>. <問題名>`（ドットのあとに半角スペース）を推奨する。
+3. **公式 URL**
+   - リンク・`問題:` 行に使うベースは `https://leetcode.com/problems/<slug>/`。**`問題:` 行**は **`/description/` 付き**（例: `.../linked-list-cycle/description/`）で揃えてよい。`<slug>` は公式サイトで確認する。
 4. **複数問題にまたがる変更**
-   - タイトルに **各問題の番号と名前** を列挙するか、`+` などで要約し、本文では **各問題ごとに** `[#番号 問題名](https://leetcode.com/problems/<slug>/)` 形式でリンクを並べる。**`問題:` 行**は問題ごとに 1 行ずつ（または運用に合わせて整理）とする。
+   - タイトルに各問題を列挙するか要約し、本文では **問題ごとに** 基準フォーマットの行 2（リンク）と行 5（`問題:`）を繰り返す。
 
 ### Phase 4: PR タイトル・本文の生成 (Internal Step)
 
-- **タイトル**: Phase 3 で特定した **問題番号と LeetCode 問題名** を含む短い一行（例: `#42 Trapping Rain Water`）。必要なら `feat:` 等の接頭辞はリポジトリ慣習に合わせてよいが、**番号と問題名が読み取れること**を最優先する。
-- **本文**: **変更内容の概要・セクションは書かない。** 説明文は **Phase 5 で一度 PR を作成したあと**、**PR の URL を含んだ完全版に差し替える**二段階とする。Phase 4 では次の素材を用意する。
-  - **URL の表記**:
-    - **番号+問題名 → LeetCode**: Phase 3 で確定した問題ページ `https://leetcode.com/problems/<slug>/` へ、**Markdown のリンク**で接続する。リンクテキストは `#<番号> <英語の問題名>`（例: `[#1 Two Sum](https://leetcode.com/problems/two-sum/)`）。
-    - **問題 URL（`PR:` 用コードブロックの直前）**: 次の 1 行を入れる。ラベルは **`問題:`**（半角コロン）、値は **平文の URL**（例: `問題: https://leetcode.com/problems/linked-list-cycle/description/`）。`/description/` 付きで LeetCode の問題ページと揃える。
-    - **PR の URL**: **Markdown のコードブロック**（バッククォート 3 つで囲むフェンス）の中に **`PR:` と URL をそのまま**書く。GitHub 上で URL がクリック可能なリンクに自動整形されず、バニラの文字列として表示される。Markdown のリンク記法 `[...](...)` は使わない。
-  - **言語**: Phase 2 の差分に含まれるファイルの拡張子・shebang 等から、利用しているプログラミング言語を特定する（例: `.py` → `Python`, `.rs` → `Rust`, `.go` → `Go`）。複数ある場合は列挙する。
-  - **説明文の完成形（Phase 5 の第2手順で本文に反映する）**: 次のブロックが最終形。挨拶のあとは **番号+問題名を LeetCode 問題 URL にリンクした 1 行** → レビュー依頼の定型 → **空行** → **`問題:` 行（問題ページの平文 URL）** → **空行** → **`PR:` をコードブロックで囲んだブロック**（URL は第1手順のあとに取得したもの）。最後に言語行。
+- **タイトル・本文の骨子**は冒頭の **「本文・タイトルのフォーマット（基準）」** に従う。ここでは差し込む値だけを確定する。
+- **タイトル**: Phase 3 の **`<番号>. <英語タイトル>`** 。
+- **本文**: **変更内容の概要セクションは書かない。**
+  - **行 2 のリンク**: `[番号. 問題名](https://leetcode.com/problems/<slug>/)` — スラッグは Phase 3 の URL と一致させる。
+  - **行 5**: `問題:` + 平文 URL（`/description/` 推奨）。
+  - **行 7**: `gh pr view` で得た GitHub PR の URL を **インラインコード**で記載（Phase 5 第2手順まで保留可）。
+  - **行 8**: Phase 2 の差分から言語名を決める。
+
+**完成形の例**（第2手順まで進んだあとの `.pr_body_temp.md`）:
 
 ````
 いつもお世話になっております。
-[#1 Two Sum](https://leetcode.com/problems/two-sum/)
+[1. Two Sum](https://leetcode.com/problems/two-sum/)
 に取り組みましたので、お時間あればレビューしていただけると嬉しいです！
 
 問題: https://leetcode.com/problems/two-sum/description/
@@ -68,39 +92,36 @@ PR: `https://github.com/org/repo/pull/42`
 言語: <gitの差分で取得した利用言語>
 ````
 
-  - **第1手順（`gh pr create`）用の本文**: 上記と同じ構成でよいが、**`PR:` と URL を三重バッククォートのフェンスで囲むブロックは書かない**（この時点では URL が無いため）。**番号+問題名の LeetCode リンク行**・定型・**`問題:` 行**・言語行を `.pr_body_temp.md` に書く（`問題:` は Phase 3 で確定した URL でよい）。
+- **第1手順用**（`gh pr create` 直前）: 上記と同じだが **行 7（`PR:` 行）を省略**。行 5 のあとに空行を入れ、**行 8（言語）**まで書く。
 
 ### Phase 5: Pull Request の作成 (Execute Step)
 
-**重要: PR は Open 状態で作成する。** `--draft` は付けない。既に Draft の PR を更新する場合は `gh pr ready` で Ready にしてよい。
+**重要: 新規 PR は Open（非 Draft）で作る。** `--draft` は付けない。既存 PR が Draft のときだけ `gh pr ready` でレビュー可能にする。
 
-**新規作成の手順は必ず次の順番とする: (1) PR を一度作成する → (2) PR の URL を取得する → (3) `PR:` をコードブロックで囲んだ完成形の説明文で本文を更新する。**
+**新規作成の流れ**: (1) `gh pr create` → (2) `gh pr view` で URL 取得 → (3) 基準フォーマットの **行 7** を埋めた `.pr_body_temp.md` で `gh pr edit`。
 
 #### 新規作成
 
-1. **既存 PR の確認**: `gh pr view --json number,url,isDraft 2>/dev/null` で現在のブランチに紐づく PR が**無い**ことを確認する。
-2. **第1手順 — PR を一度作成する**: Phase 4 の **第1手順用本文**（`PR:` 用のコードブロックなし）を `.pr_body_temp.md` に書き、Phase 1 のマージ先を `--base` に指定して実行する。
+1. **既存 PR の確認**: `gh pr view --json number,url,isDraft 2>/dev/null` で、**このブランチに未作成**であることを確認する。
+2. **第1手順 — `gh pr create`**: Phase 4 の **第1手順用**本文を `.pr_body_temp.md` に書く。Phase 1 のマージ先を `--base` にし、**タイトルは Phase 4 と同じ `番号. 英語タイトル`** を `--title` に渡す。
 
 ```bash
-gh pr create --base <マージ先ブランチ> --title "<生成したタイトル>" --body-file .pr_body_temp.md
+gh pr create --base <マージ先ブランチ> --title "1. Two Sum" --body-file .pr_body_temp.md
 ```
 
-`--draft` は使用しない（デフォルトで Open）。
+（`--title` は実際の番号・問題名に置き換える。）
 
-3. **第2手順 — PR の URL を含めた説明文に差し替える**:
-   - `gh pr view --json url -q .url`（または `gh pr view --json url`）で、直前に作成した PR の URL を取得する。
-   - Phase 4 の **完成形**どおり、**`問題:` 行と `PR:` をコードブロックで囲んだ全文**を `.pr_body_temp.md` に書き直す（番号+問題名は **LeetCode への Markdown リンク**、`問題:` は平文 URL、`PR:` は**フェンス内のバニラ文字列**。挨拶から言語行まで、最終形で揃える）。
-   - `gh pr edit --body-file .pr_body_temp.md` で本文を更新する。
+3. **第2手順 — `gh pr edit`**: `gh pr view --json url -q .url` で URL を取得し、基準フォーマットの **完成形**（行 7 入り）に `.pr_body_temp.md` を書き換えてから `gh pr edit --body-file .pr_body_temp.md` を実行する。
 
-4. **後始末**: `rm .pr_body_temp.md` で一時ファイルを削除する。
+4. **後始末**: `rm .pr_body_temp.md`
 
 #### 既存 PR がある場合
 
-- URL は既に存在するため、**第1手順は行わず**、完成形（`問題:` 行および `PR:` をフェンスで囲んだブロック入り）の `.pr_body_temp.md` を用意して `gh pr edit --title "<タイトル>" --body-file .pr_body_temp.md` のみ実行する。Draft の場合は `gh pr ready` で Open にしてよい。
+- **第1手順をスキップ**し、完成形の `.pr_body_temp.md` を用意して `gh pr edit --title "<タイトル>" --body-file .pr_body_temp.md` のみ実行する。Draft なら `gh pr ready`。
 
 ## 注意事項
 
-- **本文中の URL**: **番号+問題名**は **LeetCode 問題ページへの Markdown リンク**とする。**`問題:` 行**には **問題ページの URL を平文**で書く（例: `問題: https://leetcode.com/problems/.../description/`）。**GitHub の PR の URL**（`PR:` の行のURL文字列）は **バッククォートで囲むコードブロックの中に**書き、GitHubに自動でリンクされない文字列として表示する。
+- **表記の単一の基準**は **「本文・タイトルのフォーマット（基準）」** と Phase 4 の完成形例。本文の URL 行分け・`121. ` 形式・`PR:` のインラインコードはそこに従う。
 - **引数で渡されたブランチをマージ先とする**: `--base` は Phase 1 のマージ先ブランチと一致させる。
 - **実行エラー**（未ログイン、リモート未プッシュなど）が出た場合は内容を解析し、修正案を示したうえで再実行する。
 - `.pr_body_temp.md` が原因で `Warning: 1 uncommitted change` が出ても、最後にその警告を報告する必要はない。
