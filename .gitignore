@@ -12,3 +12,7 @@ Desktop.ini
 *~
 *.swp
 *.swo
+
+# Skill local config (machine-specific paths; public repo)
+skills/**/config.local.yaml
+**/config.local.yaml
