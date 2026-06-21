@@ -1,0 +1,6 @@
+# Copy this file to config.local.yaml (same directory) and set your paths.
+# config.local.yaml is gitignored — do not commit machine-specific values.
+#
+# Alternative: export OBSIDIAN_VAULT=/absolute/path/to/vault
+
+vault: /path/to/your/obsidian-vault
