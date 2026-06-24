@@ -6,310 +6,301 @@ description: >-
   知識の定着を求められたときに使用する。
 compatibility: Obsidian vault へのファイル書き込み権限が必要。ネットワーク不要。
 metadata:
-  version: "1.8"
+  version: "3.1"
 ---
 
 # Obsidian Agent Learning Capture
 
-AI エージェントとの対話から、**将来の自分が検索・復習・関連付けしやすい**ノートを Obsidian に残す。
+AI エージェントとの会話を、**学習者が後で振り返れるように体系化して**保存する。狙いは 3 つ:
 
-**構造の目的**: 人間が「どこに何があるか」の知識マップを持てるよう、必要に応じてドキュメントを分割し、再帰的にディレクトリ階層を作る。詳細は [references/STRUCTURE.md](references/STRUCTURE.md) を参照。
+1. **木構造で体系的に整理** — 「どこに何があるか」が一目で分かるフォルダ階層に配置する
+2. **検索しやすいメタデータ** — YAML frontmatter で分類・状態・関連を付与する
+3. **読みやすい構造化ドキュメント** — 会話の要点を後から素早く思い出せる本文にする
 
-## セットアップ（初回・パス解決）
+保存とは単なる「ファイル作成」ではなく、**既存の知識ツリーに新しい知識を正しく接ぎ木する**作業である。毎回「マージするか・新規作成するか」「どのフォルダが MECE で分かりやすいか」を判断する。
 
-**vault パス等の機密・環境依存情報は SKILL 本文に書かない。** `config.local.yaml`（gitignore）または環境変数で渡す。
+## セットアップ
 
-1. `config.example.yaml` を `config.local.yaml` にコピーし `vault:` を設定
-2. 各 vault 操作の**最初**にパスを解決（zsh / bash 共通）:
+`config.example.yaml` を `config.local.yaml` にコピーし `vault:` を設定する（**コミットしない**）。または `OBSIDIAN_VAULT` を export する。
+
+各 vault 操作の**最初**に:
 
 ```bash
 eval "$( "<skill-dir>/scripts/resolve-config.sh" )"
-# → VAULT, SCRIPT, SKILL_DIR が export される
+# → VAULT, SCRIPT, SKILL_DIR
 ```
-
-bash のみ `source "<skill-dir>/scripts/resolve-config.sh"` でも可。
 
 | 変数 | 意味 |
 |------|------|
 | `VAULT` | Obsidian vault の絶対パス |
-| `SCRIPT` | `scripts/vault-write.sh` の絶対パス |
-| `SKILL_DIR` | 本スキルディレクトリ |
-
-環境変数 `OBSIDIAN_VAULT` でも vault を上書きできる。`config.local.yaml` は **コミットしない**。
-
-**配置の推奨**: 公開テンプレートは git リポジトリ、実運用は `~/.agents/skills/obsidian-agent-learning/` 等のローカルに `config.local.yaml` 付きで置く。
+| `SCRIPT` | `scripts/vault-write.sh`（ロック付き安全書き込み） |
+| `CONTENTS_MAP` | Contents map（フォルダ構造の地図）の絶対パス。既定は `$VAULT/_contents-map.md` |
 
 ## 起動条件
 
-次のいずれかで本スキルを適用する:
+- ユーザーが Obsidian への保存を依頼した
+- 会話で重要な学びが生まれ、記録を求められた
+- 「この会話を残して」「ナレッジベースに追加して」と指示された
 
-- ユーザーが明示的に Obsidian への保存を依頼した
-- 会話で重要な学びが生まれ、ユーザーが記録を求めた
-- ユーザーが「この会話を残して」「ナレッジベースに追加して」と指示した
+---
 
-保存前に、**新規作成か既存ノート更新か**を必ず確認する。曖昧ならユーザーに 1 問だけ確認する。
+## Contents map とは
 
-## Vault 基本情報
+vault の学習ノート木構造を 1 枚で見渡せる**地図**。毎回ゼロから全フォルダを走査しなくて済むよう、
+**呼び出しの最初に読み**、**最後に更新する**。`$CONTENTS_MAP`（既定 `$VAULT/_contents-map.md`）に置く。
 
-| 項目 | 値 |
-|------|-----|
-| Vault パス | **`$VAULT`**（[セットアップ](#セットアップ初回パス解決) で解決） |
-| 学習ノート（**デフォルト**） | `Tech/{カテゴリ}/` — 内容に応じた分野フォルダ（下表） |
-| LeetCode 関連 | `Tech/LeetCode/{番号}_{name}/` |
-| デイリーノート | `Daily/YYYY-MM-DD.md`（**本スキルのデフォルト保存先ではない**） |
-| 技術ブログ用ネタ | `Tech/Zenn/`（**本スキルのデフォルト保存先ではない**） |
-| 深掘りクイズ形式 | `Tech/daily−quiz/`（触らない） |
-| 手順・ワークフロー | `Memo/{tool-or-context}/` |
-| セッション要約 | `Tech/Sessions/YYYY-MM/` |
-| フォルダ地図（MOC） | 共通フォーマット集合の `_index.md`（**条件を満たす場合のみ**） |
+役割:
 
-### `Tech/` カテゴリ（L0）
+- **入口** — どのカテゴリに何があるかを最初に把握する手がかり
+- **設計図** — フォルダ構成のあるべき姿（命名・分類軸・階層）を定義する
+- **保守対象** — 保存・再編のたびに最新化する
 
-**`Tech/Agent/` ディレクトリは作らない。** エージェント由来は frontmatter で区別する。
+重要な原則: **Contents map を盲信しない。** 実ファイル・実フォルダが正であり、地図と食い違ったら実体を優先し、地図を直す。
 
-| カテゴリフォルダ | 内容 | `domains` 目安 |
-|----------------|------|----------------|
-| `Algorithm & Data Structure/` | アルゴリズム・データ構造 | `DSA:*` |
-| `LeetCode/` | LeetCode 問題・解法 | LeetCode 専用 |
-| `Systems/` | OS・メモリ・GC 等 | `SYS:*` |
-| `Programming Languages/` | 言語仕様・ランタイム | `FPL:*` |
-| `Networking/` | プロトコル・分散 | `NET:*` |
-| `Software Architecture/` | 設計・アーキテクチャ | `ARCH:*` |
-| `Performance/` | パフォーマンス・計測 | `PERF:*` |
-| `Sessions/` | セッション要約 | — |
-| `Tools/` | ツール・エージェント設定 | `TOOL:*` |
-
-サブトピック（L1）: `domains` の `"DSA: Search"` → `Tech/Algorithm & Data Structure/Search/`（任意。既存がフラットならカテゴリ直下でも可）
-
-詳細: [references/STRUCTURE.md](references/STRUCTURE.md)
-
-### エージェント由来の識別（metadata）
-
-保存先フォルダではなく **frontmatter** で区別する:
-
-```yaml
-source: agent          # 必須
-agent: cursor          # 推奨
-tags:
-  - agent-learning     # 必須
-```
-
-手動作成ノートと混在しても、Dataview や検索で `source: agent` / `#agent-learning` によりフィルタできる。
-
-### `Tech/Zenn/` について
-
-`Tech/Zenn/` は**技術ブログ（Zenn 等）に書くためのネタ・下書き素材**を貯める場所。学習記録やエージェント対話のログ置き場ではない。
-
-| 保存先 | 用途 |
-|--------|------|
-| `Tech/{カテゴリ}/` | 学習・定着・復習用（本スキルのデフォルト） |
-| `Tech/Zenn/` | 公開記事に昇格させるネタ・構成・下書き |
-
-- ユーザーが「ブログネタに」「Zenn に書く用に」等と**明示した場合のみ** `Tech/Zenn/` に保存する
-- 通常の学習記録は `Tech/{カテゴリ}/` に保存し、ブログ化の可能性がある場合は `related` で `Tech/Zenn/` のネタノートへリンクする（逆方向も可）
-- `Tech/Zenn/` への保存をユーザーが求めていない限り、ここへ書き込まない
-
-### `Daily/` について
-
-`Daily/` は**日次の個人メモ・振り返り**用。エージェント学習記録の保存先ではない。
-
-| 保存先 | 用途 |
-|--------|------|
-| `Tech/{カテゴリ}/` | 学習・定着・復習用（本スキルのデフォルト） |
-| `Daily/` | その日の雑記・振り返り・個人的な記録 |
-
-- 学習ノートの内容を `Daily/` に**書き込まない**（デフォルト）
-- ユーザーが「デイリーノートにもリンクして」「Daily に追記して」等と**明示した場合のみ**、既存の `Daily/YYYY-MM-DD.md` へ wikilink を 1 行追記してよい
-- `Daily/` にファイルを新規作成しない（ユーザーが明示しない限り）
-- 学習内容そのものは常に `Tech/{カテゴリ}/` の専用ノートに保存する
+---
 
 ## ワークフロー
 
-### Step 1: 保存対象の抽出
+### Step 0: Contents map を読み、体系を把握する（毎回・最初）
 
-会話から以下を抽出する（全部入りにしない。1 ノート = 1 トピックを原則とする）:
+```bash
+eval "$( "$SKILL_DIR/scripts/resolve-config.sh" )"
+
+if [[ -f "$CONTENTS_MAP" ]]; then
+  cat "$CONTENTS_MAP"          # まず地図を参考にする（盲信しない）
+else
+  echo "no contents map yet"   # 初回は Step 7+ で新規作成する
+fi
+```
+
+- 地図があれば、それを足がかりに既存カテゴリ・関連ノートの当たりをつける
+- 地図が無い・古いと感じたら、Step 2 の実走査で補正する（地図より実体を信用する）
+
+### Step 1: 会話の要点を抽出・構造化する
+
+会話から、学習者が後で価値を感じる要素を抜き出す（雑多に全部入れない）:
 
 1. **核心の学び** — 1〜3 文で言える洞察
-2. **なぜ重要か** — 問題解決・面接・本番でどう効くか
-3. **具体例** — コード、コマンド、図、比較表
-4. **誤解していた点** — あれば Before/After
-5. **未解決・次の調査** — あれば
+2. **なぜ重要か** — 問題解決・面接・実務でどう効くか
+3. **具体例** — コード・コマンド・比較表・図
+4. **誤解していた点** — Before / After（あれば）
+5. **未解決・次に調べること**（あれば）
 
-### Step 1.5: 分割と階層の設計
+**1 ノート = 1 トピック**を原則とする。独立した学びが 2 つ以上あれば、後段で複数ノートに分割する。
 
-[references/STRUCTURE.md](references/STRUCTURE.md) に従い、保存前に構造を設計する:
+### Step 2: 実フォルダで地図を検証・補正する
 
-1. **分割判断** — 独立トピック 2 つ以上、150 行超、`type`/`domains` 混在、時系列 step なら分割
-2. **パス決定** — 内容から `Tech/{カテゴリ}/` を選び、必要ならサブトピック階層を追加
-3. **MOC 判定** — 共通フォーマットの集合か確認。条件を満たす場合のみ `_index.md` を計画（[STRUCTURE.md](references/STRUCTURE.md) 参照）
-4. **ディレクトリ作成** — 存在しないパスは `mkdir -p` で再帰的に作成
-
-```
-Tech/LeetCode/35_searchInsertPosition/    ← step 系列（MOC あり）
-├── _index.md
-├── step1.md
-└── step2.md
-
-Tech/Algorithm & Data Structure/Search/   ← 独立ノート（MOC なし）
-├── Lower Bound.md
-└── Binary Search Loop Invariant.md
-```
-
-分割時は兄弟ノートを `related` でリンクする。MOC がある集合では `_index.md` から子ノートへリンクする。
-
-### Step 2: 既存ノートの確認（書き込み前必須）
-
-保存先の **絶対パス `TARGET`** を決めたら、**Write の前に必ず**存在確認する。詳細: [references/WRITE.md](references/WRITE.md)
+Contents map はあくまで参考。書き込み先を決める前に、**実体**を調べて地図と突き合わせる。
 
 ```bash
-eval "$( "$SKILL_DIR/scripts/resolve-config.sh" )"
+# トップレベルのフォルダ構成（知識の棚を把握）
+find "$VAULT" -maxdepth 2 -type d ! -path '*/.*' | sort
 
-TARGET="$VAULT/Tech/..."   # Step 3 で決定した vault 内絶対パス
-
-# 1. 正規パスの NEW / UPDATE 判定（必須）
-"$SCRIPT" --check "$TARGET"
-
-# 2. 意味的な重複検索
-rg -l "キーワード" "$VAULT/Tech/"
+# 同じトピック・近い概念の既存ノートを検索
+rg -l -i "キーワード" "$VAULT" --glob '*.md'
+rg -l "^topic:.*対象トピック" "$VAULT" --glob '*.md'
 ```
 
-| `--check` 結果 | 動作 |
-|----------------|------|
-| `UPDATE` | **新規作成しない**。ロック取得後、既存ファイルを Read → マージ → 同一路径へ上書き |
-| `NEW` | ロック取得後、新規作成 |
+確認すること:
 
-追加ルール:
+- 地図に載っていないフォルダ／ノートはないか（地図が古い）
+- 地図にあるのに実在しないフォルダはないか（地図が先走り）
+- 今回の学びと**同一・近接トピックのノートが既にあるか**
+- 既存の命名規則・階層の深さ・フラット配置か入れ子か
 
-- **`ファイル (N).md` へは書き込まない** — Obsidian + 外部 Write の競合退避コピー。正規パス（`(N)` なし）を `TARGET` にする
-- **LeetCode** — `Tech/LeetCode/_index.md` と `{番号}_*` フォルダ／フラット `.md` を確認。既存がフラットならサブフォルダを新設しない
-- **LeetCode frontmatter** — `Tech/LeetCode/_default-metadata.md` を **Read のみ**参照（コピー先にしない）
-- **同名の別パスを作らない** — 検索で見つかった既存ノートのパスを `TARGET` に採用
+地図と実体がずれていたら**実体を正**とし、Step 7+ で地図を直す。
 
-### Step 3: ノート種別と配置の決定
+### Step 3: マージするか・新規作成するかを判断する
 
-| `type` | 配置 | 用途 |
-|--------|------|------|
-| `concept` | `Tech/{カテゴリ}/` | 概念・原理の理解 |
-| `algorithm` | `Tech/LeetCode/{id}_{name}/` 等 | LeetCode 解法・パターン |
-| `debugging` | `Tech/{カテゴリ}/` | 調査・バグ解決の記録 |
-| `workflow` | `Memo/{tool}/` | 手順・ツール設定・運用 |
-| `decision` | `Tech/{カテゴリ}/` | 設計判断とトレードオフ |
-| `snippet` | `Tech/{カテゴリ}/` | 再利用可能なコード片 |
-| `session-summary` | `Tech/Sessions/YYYY-MM/` | 1 セッション全体の要約 |
-| `index` | 集合フォルダの `_index.md` | 共通フォーマット群の MOC（**条件を満たす場合のみ**） |
-| `blog-draft` | `Tech/Zenn/` | 技術ブログ用ネタ（**ユーザー明示時のみ**） |
+Step 2 で見つけた既存ノートを Read し、**体系性が高くなる方**を選ぶ。
 
-ファイル名: `{topic の短い英語または日本語}.md`（Obsidian wiki リンクしやすい具体名。`Untitled` 禁止）
+**既存ノートに追記（マージ）する** — 次のいずれかに当てはまるとき:
 
-配置の詳細・分割基準・命名規則: [references/STRUCTURE.md](references/STRUCTURE.md)
+- 同一トピックのノートが既にある（重複ノートを作らない）
+- 今回の学びが既存ノートの**続き・補足・別観点**で、同じ場所にある方が振り返りやすい
+- 単独では薄く、既存ノートの 1 セクションとして置く方が文脈が保たれる
 
-### Step 4: Frontmatter の付与
+→ 既存ノートを Read → 適切なセクションに統合 or `## YYYY-MM-DD 追記` を追加 → **同じパス**へ上書き。
 
-[references/FRONTMATTER.md](references/FRONTMATTER.md) のスキーマに従う。必須フィールド:
+**新規ノートを作成する** — 次のいずれかに当てはまるとき:
 
-- `created`, `updated`, `type`, `topic`, `tags`, `mastery`, `source`
+- 独立したトピックで、単独ノートにした方が検索・リンクしやすい
+- 既存ノートに混ぜると 1 ノート 1 トピックが崩れる
+- 将来この主題が育つ見込みがあり、独立した置き場が必要
 
-`source: agent` と `agent: cursor` はエージェント由来のノートで必ず付ける。
+### Step 4: 配置（フォルダ）を設計する
 
-### Step 5: ディレクトリ作成と MOC 更新
+新規作成時は、**学習者にとって「どこに何があるか」が分かる木構造**を設計する。
 
-1. 決定したパスに対して `mkdir -p` を実行
-2. [STRUCTURE.md](references/STRUCTURE.md) の MOC 作成条件を満たす場合のみ `_index.md` を計画（本文は Step 5.5 でロック付き書き込み）
-3. MOC がない場合 → 兄弟ノート間を `related` でリンク。上位階層に `_index.md` を連鎖作成しない
+判断基準:
 
-### Step 5.5: ロック付き書き込み（必須）
+- **既存フォルダに置く** — 適切なカテゴリが既にあるなら、新フォルダを作らずそこへ。既存の命名・階層に合わせる
+- **新フォルダを作る** — 既存カテゴリに収まらず、新しい分類軸の方が **MECE**（漏れ・重複なく）で分かりやすいときのみ
 
-**Cursor の Write ツールを vault へ直接使わない。** 必ず `scripts/vault-write.sh` 経由。詳細: [references/WRITE.md](references/WRITE.md)
+設計原則:
 
-```bash
-eval "$( "$SKILL_DIR/scripts/resolve-config.sh" )"
-TARGET="$VAULT/..."   # Step 2 で --check 済みの絶対パス
+1. **フォルダ = 知識の棚** — 1 フォルダ = 1 つの意味的カテゴリ（分野・問題群・プロジェクト）
+2. **ファイル = 1 トピック**
+3. **階層は浅く** — ルートから葉まで概ね 3〜4 階層以内。深くなりすぎたら分類を見直す
+4. **MECE** — 兄弟フォルダ同士が重複せず、全体として漏れがない分類にする
+5. **既存構造を尊重** — 似た意味の新フォルダを乱立させない（`Search/` と `Searching/` を併存させない等）
 
-# UPDATE: ロック内で Read 済みのマージ全文を渡す
-# NEW:    新規全文を渡す
-"$SCRIPT" "$TARGET" <<'NOTE_EOF'
-（frontmatter + 本文の完成稿）
-NOTE_EOF
-# 出力例: UPDATE:$VAULT/.../foo.md  または  NEW:$VAULT/.../foo.md
+```
+Tech/                                  # 知識のルート
+└── Algorithm & Data Structure/        # 分野カテゴリ
+    └── Search/                        # サブトピック
+        ├── Binary Search Invariants.md
+        └── Lower Bound.md
 ```
 
-手順:
+ファイル名は `topic` から付ける（Obsidian でリンクしやすい具体名。`Untitled` 等は禁止）。`(N)` を含むパスは使わない。
 
-1. Step 2 の `--check` が `UPDATE` なら、**書き込み直前**に `TARGET` を Read し `created` を保持してマージ
-2. `vault-write.sh` が **mkdir ロック取得 → 原子 replace 書き込み → ロック解放** を行う
-3. 葉ノート → 集合 `_index.md`（MOC あり）→ `Daily/` 1 行追記（明示時）の順で、**ファイルごとに 1 回ずつ**呼ぶ
-4. 1 シェル invocation = 1 ファイル（ロックを跨ぐ Write ツール呼び出しを挟まない）
+### Step 5: YAML frontmatter を付与する（検索性）
 
-### Step 6: 本文の構成と `related` の選定
+ノート先頭に必ず付ける。検索・フィルタ・復習の起点になる。
 
-[references/TEMPLATES.md](references/TEMPLATES.md) から `type` に合ったテンプレートを選ぶ（MOC は `index` テンプレート）。
+```yaml
+---
+created: YYYY-MM-DD        # 初回作成日
+updated: YYYY-MM-DD        # 最終更新日
+type: concept             # concept | algorithm | debugging | decision | snippet | session-summary
+topic: "主題（1 行・検索キー）"
+tags:
+  - agent-learning        # エージェント由来ノートは必須
+  - <分野タグ>
+domains:
+  - "DSA: Search"         # 知識領域（任意・分類精緻化）
+mastery: learning         # learning | reviewing | mastered
+source: agent             # 必須
+agent: cursor             # 推奨
+related:                  # 関連ノートへの wikilink（任意・最大 5 件）
+  - "[[Lower Bound]]"
+---
+```
 
-**`related` は最大 5 件。** 付与前に vault を検索し、関連度の高い既存ノートを選ぶ。詳細: [references/RELATED.md](references/RELATED.md)
+- エージェント由来は `source: agent` / `tags: agent-learning` で識別する（保存フォルダでは区別しない）
+- `UPDATE` 時は既存の `created` を保持し、`updated` のみ更新する
 
-1. `topic` / `tags` / `domains` / キーワードで vault を検索
-2. 前提・同一パターン・対比・同一 domain の順で関連度を評価
-3. 上位 5 件までを `related` に設定（満たさなくてよい）
-4. 本文「関連」セクションに、各リンクへ 1 行の理由を添える
+### Step 6: 読みやすい本文を構成する
+
+後から要点を素早く思い出せる構造にする:
+
+```markdown
+## TL;DR
+（3 行以内で核心）
+
+## 背景 / なぜ重要か
+
+## 詳細
+（コードは言語タグ付きフェンスで）
+
+## 自分の言葉での要約
+（定着のため必ず入れる）
+
+## 関連
+- [[関連ノート]] — なぜ関連するか 1 行
+```
 
 共通原則:
 
-- 見出しは `##` から（`#` は Obsidian のファイル名表示と被るため避ける）
-- コードブロックに言語タグを付ける
-- 自分の言葉での要約を必ず 1 セクション入れる（定着のため）
-- 漫然とリンクしない。記憶の定着に貢献する有機的な接続を優先する
+- 見出しは `##` から（`#` は Obsidian のファイル名表示と重複するため避ける）
+- 会話に存在した内容のみ記述する（事実・コードを捏造しない）
+- 関連リンクは漫然と張らず、振り返りに役立つものだけ
 
-### Step 7: デイリーノートへのリンク（ユーザー明示時のみ）
+### Step 7: ロック付きで書き込む（必須）
 
-**デフォルトでは実行しない。**
+**Cursor の Write ツールで vault に直接書かない。** Obsidian 起動中の競合で `ファイル (N).md` が増殖する。必ず `vault-write.sh` 経由で書く。
 
-ユーザーが Daily への追記を明示した場合のみ、既存の `Daily/YYYY-MM-DD.md` に wikilink を追記する:
+```bash
+eval "$( "$SKILL_DIR/scripts/resolve-config.sh" )"
 
-```markdown
-- [[ノート名]] — 1 行サマリ
+# 配置を決めた絶対パス（Step 3〜4）
+TARGET="$VAULT/Tech/Algorithm & Data Structure/Search/Binary Search Invariants.md"
+
+# NEW か UPDATE かを確認
+"$SCRIPT" --check "$TARGET"
+
+# UPDATE のときは TARGET を Read → マージした全文を渡す
+# NEW のときは完成稿を渡す
+"$SCRIPT" "$TARGET" <<'NOTE_EOF'
+（frontmatter + 本文の完成稿）
+NOTE_EOF
+# 出力: NEW:<path> または UPDATE:<path>
 ```
 
-- 学習内容の本体は `Tech/{カテゴリ}/` に保存済みであること
-- ファイルが存在しない場合は**作成せず**、ユーザーに確認する
-- デイリーノートへの追記をユーザーが求めていない限り、`Daily/` には一切書き込まない
+- 1 ファイル = `vault-write.sh` 1 回。複数ノートに分割したら、ファイルごとに 1 回ずつ呼ぶ
+- `--check` が `UPDATE` を返したら**新規作成せず**、既存ファイルを Read してマージしてから同じパスへ上書きする
 
-### Step 8: 保存後の報告
+### Step 8: Contents map を更新する（毎回・最後）
 
-ユーザーに以下を簡潔に報告する:
+保存・再編で得た最新の木構造を `$CONTENTS_MAP` に反映する。次回の Step 0 が正確になる。
 
-- 作成/更新したファイルパス（分割した場合は一覧 + ディレクトリツリー）
-- `topic`, `tags`, `next_review`
-- 作成/更新した `_index.md`（MOC）のパス（作成した場合のみ）
-- 関連ノートへのリンク有無
+手順:
 
-## 品質チェックリスト
+1. 既存の地図があれば Read（無ければ新規作成）
+2. 今回の保存・移動を反映してツリーを更新
+   - 追加したフォルダ／ノート、変更したカテゴリ
+   - Step 2 で見つけた、地図に未記載の既存フォルダ（実体に合わせて補う）
+3. **フォルダ構成を変えた方が体系的なら、地図上で新しい構成を定義する**
+   - 例: 肥大化したフォルダを MECE なサブカテゴリに分割、似た意味の重複フォルダを統合
+   - 地図に新構成を定義したら、**今回触れたノートは新パスへ**保存し、旧パスは整理する
+   - 既存ノートの大規模な移動が必要なら、地図に「移行予定」として記し、Step 9 でユーザーに提案する（無断で大量移動しない）
+4. `vault-write.sh` で地図を書き込む（地図も vault 内ファイルなのでロック付き）
 
-保存前に確認:
+```bash
+"$SCRIPT" "$CONTENTS_MAP" <<'MAP_EOF'
+---
+type: contents-map
+updated: 2026-06-25
+maintained-by: obsidian-agent-learning
+note: 実ファイルが正。地図と食い違う場合は実体を優先し本マップを修正する。
+---
 
-- [ ] 1 ノート 1 トピックになっている
-- [ ] 150 行超・複数トピック混在なら分割済み
-- [ ] ディレクトリ深さが 4 階層以内
-- [ ] 不要な `_index.md` を作っていない
-- [ ] 既存 `_index.md` の `children` が実ファイルと一致（MOC がある場合）
-- [ ] frontmatter の必須フィールドが揃っている
-- [ ] `category` が実パスと一致（設定している場合）
-- [ ] `tags` に `agent-learning` が含まれている
-- [ ] TL;DR または要点セクションがある
-- [ ] コード・事実に hallucination がない（会話内容のみから記述）
-- [ ] 既存 vault の命名・フォルダ規則に従っている
-- [ ] `next_review` が設定されている（復習促進）
-- [ ] `related` が最大 5 件で、vault 検索に基づく関連度の高いノートのみ
-- [ ] `Tech/Agent/` に新規ファイルを作っていない
-- [ ] `Daily/` と `Tech/Zenn/` へユーザー明示なく書き込んでいない
-- [ ] 書き込み前に `vault-write.sh --check "$TARGET"` を実行した
-- [ ] `UPDATE` 時は同一路径をロック付きで上書きし、別パスに同名ファイルを作っていない
-- [ ] `ファイル (N).md` 形式の競合コピーへ書き込んでいない
-- [ ] `config.local.yaml` または `OBSIDIAN_VAULT` で `$VAULT` を解決済み
-- [ ] vault へ Write ツールを使わず `vault-write.sh` 経由のみ
+# Contents Map
 
-## 追加リソース
+学習ノート木構造の地図。SKILL 呼び出し時にまず参照（盲信しない）し、保存後に更新する。
 
-- 書き込み・ロック: [references/WRITE.md](references/WRITE.md)
-- 分割・階層化・MOC: [references/STRUCTURE.md](references/STRUCTURE.md)
-- `related` 選定ルール: [references/RELATED.md](references/RELATED.md)
-- Frontmatter 全フィールド定義: [references/FRONTMATTER.md](references/FRONTMATTER.md)
-- ノート種別テンプレート: [references/TEMPLATES.md](references/TEMPLATES.md)
+## Tech/
+- `Algorithm & Data Structure/` — アルゴリズム・データ構造
+  - `Search/` — 探索（二分探索の不変条件・lower bound など）
+- `LeetCode/` — LeetCode 問題ごとの解法・パターン
+- `Systems/` — OS・メモリ・GC
+- `Programming Languages/` — 言語仕様・ランタイム
+
+## Memo/
+- `cursor/` — ツール・エージェント設定の手順
+
+<!-- 各エントリは「フォルダ — 1 行の説明」。深さは実体に合わせ概ね 3〜4 階層以内 -->
+MAP_EOF
+```
+
+大きなサブツリーは、そのフォルダ直下に同形式の `_contents-map.md` を置き、ルート地図から辿れるようにしてもよい（任意）。
+
+### Step 9: 報告する
+
+- 作成 / 更新したパス（分割時は一覧）と `NEW` / `UPDATE` の別
+- なぜそのフォルダ・そのマージ判断にしたか（1〜2 行）
+- **Contents map の更新内容**（追加・補正・再編の定義、提案した移行があれば）
+- `topic`, `tags`, `related` の有無
+
+---
+
+## 品質チェック
+
+保存前に確認する:
+
+- [ ] Step 0 で Contents map を読んだ（無ければ初回作成を予定した）
+- [ ] 1 ノート 1 トピックになっている（混在なら分割した）
+- [ ] Step 2 で実フォルダを走査し、地図とのずれを実体優先で補正した
+- [ ] Step 2 で既存構造と同一トピックノートを検索した
+- [ ] マージ / 新規の判断に根拠がある（重複ノートを作っていない）
+- [ ] 新フォルダを作った場合、MECE で既存と重複しない分類になっている
+- [ ] 階層が深すぎない（概ね 3〜4 階層以内）
+- [ ] frontmatter の必須フィールド（`created` `updated` `type` `topic` `tags` `mastery` `source`）が揃っている
+- [ ] `tags` に `agent-learning` が含まれる
+- [ ] TL;DR と「自分の言葉での要約」がある
+- [ ] 会話にない内容を捏造していない
+- [ ] `UPDATE` 時は `created` を保持し、同じパスへ上書きした
+- [ ] vault へ Write ツールを使わず `vault-write.sh` 経由で書いた
+- [ ] `(N)` 付きパスへ書いていない
+- [ ] Step 8 で Contents map を最新の木構造に更新した（再編時は新構成を定義した）

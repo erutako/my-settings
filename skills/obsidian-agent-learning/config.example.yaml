@@ -4,3 +4,8 @@
 # Alternative: export OBSIDIAN_VAULT=/absolute/path/to/vault
 
 vault: /path/to/your/obsidian-vault
+
+# Optional: path to the Contents map (the folder-structure index the skill
+# reads first and updates last). Relative paths are resolved under vault.
+# Default: _contents-map.md  (i.e. <vault>/_contents-map.md)
+# contents_map: _contents-map.md

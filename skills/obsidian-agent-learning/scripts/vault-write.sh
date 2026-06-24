@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
-# Acquire a vault file lock, then write stdin to TARGET (atomic replace).
-# Usage:
-#   vault-write.sh --check <absolute-path>     # prints NEW or UPDATE
-#   vault-write.sh <absolute-path> <<'EOF'     # locked write
+# Safe vault write: existence check + locked atomic replace.
+#
+#   vault-write.sh --check <abs-path>     # prints NEW or UPDATE (no write)
+#   vault-write.sh <abs-path> <<'EOF'     # locked atomic write (stdin = full body)
 #   ...
 #   EOF
+#
+# Locking serializes concurrent writes to the same path; atomic replace plus
+# refusing " (N).md" conflict-copy paths avoids Obsidian duplicate files.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -15,9 +18,9 @@ LOCK_ROOT="$VAULT/.agent-locks"
 TIMEOUT=60
 
 usage() {
-  echo "Usage: vault-write.sh [--check] <absolute-target-path>" >&2
-  echo "  --check  Print NEW or UPDATE for TARGET; no lock, no write." >&2
-  echo "  stdin    Full file body (required for write)." >&2
+  echo "Usage:" >&2
+  echo "  vault-write.sh --check <abs-path>" >&2
+  echo "  vault-write.sh <abs-path>  # stdin = full file body" >&2
   exit 1
 }
 
@@ -44,7 +47,7 @@ esac
 
 base="$(basename "$TARGET")"
 if [[ "$base" =~ \ \([0-9]+\)\.md$ ]]; then
-  echo "ERROR: refusing conflict-copy path (Obsidian/external-write duplicate): $TARGET" >&2
+  echo "ERROR: refusing conflict-copy path (Obsidian duplicate): $TARGET" >&2
   echo "HINT: use the canonical path without ' (N)' suffix." >&2
   exit 1
 fi
